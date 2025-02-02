@@ -55,6 +55,8 @@ const LoginScreen = ({ navigation }) => {
 
     return (
         <View style={[styles.container, { backgroundColor: themeColors.background }]}>
+            <Text style={[styles.titleName, { color: themeColors.text }]}>Safe Vault Pass</Text>
+
             <Text style={[styles.title, { color: themeColors.text }]}>Login</Text>
 
             <TextInput
@@ -119,6 +121,11 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         padding: 20,
+    },
+    titleName: {
+        fontSize: 32,
+        fontWeight: 'bold',
+        marginBottom: 80,
     },
     title: {
         fontSize: 24,

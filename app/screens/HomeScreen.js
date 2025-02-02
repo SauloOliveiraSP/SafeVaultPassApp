@@ -6,11 +6,16 @@ import {
     FlatList,
     TextInput,
     TouchableOpacity,
-    Clipboard
+    Clipboard,
+    Alert
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import axios from 'axios';
 import { useTheme } from '../context/ThemeContext';
 import { Colors } from '../styles/Colors';
 import { Ionicons } from '@expo/vector-icons'; // Usando o Ionicons para o ícone de olho
+import { API_BASE_URL } from '../../config';
+
 
 const HomeScreen = ({ navigation }) => {
     const { isDarkMode } = useTheme();
@@ -18,18 +23,126 @@ const HomeScreen = ({ navigation }) => {
 
     const [passwords, setPasswords] = useState([]);
     const [editingPassword, setEditingPassword] = useState(null);
+    const [insertingPassword, setInsertingPassword] = useState(null);
     const [service, setService] = useState('');
     const [login, setLogin] = useState('');
     const [password, setPassword] = useState('');
     const [passwordVisible, setPasswordVisible] = useState(null);
 
     const loadPasswords = async () => {
-        const jsonData = [
-            { id: 0, service: 'Google', login: 'user1', password: 'password123' },
-            { id: 1, service: 'Facebook', login: 'user2', password: 'mypassword' },
-            { id: 2, service: 'Twitter', login: 'user3', password: '12345678' },
-        ];
-        setPasswords(jsonData);
+        try {
+            // Obtém o token armazenado no AsyncStorage
+            const token = await AsyncStorage.getItem('jwt_token');
+
+            if (!token) {
+                console.error('Usuário não logado. Por favor realizar login novamente.');
+                return;
+            }
+
+            // Faz a requisição GET com o token no cabeçalho Authorization
+            const response = await axios.get(`${API_BASE_URL}/passwords`, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+
+            // Atualiza o estado com os dados retornados pela API
+            setPasswords(response.data);
+        } catch (error) {
+            console.error('Erro ao carregar suas senhas:', error);
+        }
+    };
+
+    const insertPasswords = async (id) => {
+        try {
+            const token = await AsyncStorage.getItem('jwt_token');
+
+            if (!token) {
+                console.error('Usuário não logado. Por favor realizar login novamente.');
+                return;
+            }
+
+            const response = await axios.post(`${API_BASE_URL}/passwords`,
+                {
+                    service: service,
+                    login: login,
+                    password: password
+                },
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        "Content-Type": "application/json"
+                    }
+                }
+            );
+
+            Alert.alert("Sucesso", "Senha adicionada com sucesso!");
+
+        } catch (error) {
+            console.error('Erro ao adicionar uma nova senha:', error);
+        }
+    };
+
+    const updatedPasswords = async (id) => {
+        try {
+            const token = await AsyncStorage.getItem('jwt_token');
+
+            if (!token) {
+                console.error('Usuário não logado. Por favor realizar login novamente.');
+                return;
+            }
+
+            const response = await axios.put(`${API_BASE_URL}/passwords/${id}`,
+                {
+                    login: login,
+                    password: password
+                },
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        "Content-Type": "application/json"
+                    }
+                }
+            );
+
+            Alert.alert("Sucesso", "Dados da senha alterada com sucesso!");
+
+        } catch (error) {
+            console.error('Erro ao alterar dados da senha:', error);
+        }
+    };
+
+    const removePasswords = async (id) => {
+        try {
+            const token = await AsyncStorage.getItem('jwt_token');
+
+            if (!token) {
+                console.error('Usuário não logado. Por favor realizar login novamente.');
+                return;
+            }
+
+            const response = await axios.delete(`${API_BASE_URL}/passwords/${id}`, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+
+            Alert.alert("Sucesso", "Senha removida com sucesso!");
+
+        } catch (error) {
+            console.error('Erro ao excluir a senha:', error);
+        }
+    };
+
+    const confirmUpdate = (onConfirm, title, question) => {
+        Alert.alert(
+            title,
+            question,
+            [
+                { text: "Cancelar", style: "cancel" },
+                { text: "Confirmar", onPress: onConfirm }
+            ]
+        );
     };
 
     useEffect(() => {
@@ -38,40 +151,54 @@ const HomeScreen = ({ navigation }) => {
 
     const handleEditPassword = (item) => {
         setEditingPassword(item);
+        setInsertingPassword(null);
         setService(item.service);
         setLogin(item.login);
         setPassword(item.password);
     };
 
-    const handleSaveEdit = () => {
-        const updatedPasswords = passwords.map((item) =>
-            item.id === editingPassword.id
-                ? { ...item, service, login, password }
-                : item
-        );
-        setPasswords(updatedPasswords);
-        setEditingPassword(null);
-        setService('');
-        setLogin('');
-        setPassword('');
+    const handleNewPassword = () => {
+        setEditingPassword(true);
+        setInsertingPassword(true);
+        setService("");
+        setLogin("");
+        setPassword("");
+    };
+
+    const handleSaveEdit = async () => {
+
+        if (insertingPassword)
+            confirmUpdate(async () => {
+                await insertPasswords();
+                await loadPasswords();
+            }, "Confirmar Inclusão", "Tem certeza de que deseja adicionar essa senha?");
+        else
+            confirmUpdate(async () => {
+                await updatedPasswords(editingPassword.id);
+                await loadPasswords();
+            }, "Confirmar Alteração", "Tem certeza de que deseja alterar os dados da senha?");
+
+        await loadPasswords();
+
+        handleBackEdit();
     };
 
     const handleBackEdit = () => {
         setEditingPassword(null);
-        setService('');
-        setLogin('');
-        setPassword('');
     };
 
-    const handleRemovePassword = (id) => {
-        const updatedPasswords = passwords.filter(item => item.id !== id);
-        setPasswords(updatedPasswords);
+    const handleRemovePassword = async (id) => {
+        confirmUpdate(async () => {
+            await removePasswords(id);
+            await loadPasswords();
+        }, "Confirmar Alteração", "Tem certeza de que deseja excluir a senha?");
+
+        await loadPasswords();
     };
 
     const togglePasswordVisibility = (id) => {
         setPasswordVisible(passwordVisible === id ? null : id);
     };
-
 
     const renderPasswordItem = ({ item }) => (
         <View style={[styles.passwordItem, { backgroundColor: themeColors.inputBackground }]}>
@@ -137,13 +264,28 @@ const HomeScreen = ({ navigation }) => {
 
     return (
         <View style={[styles.container, { backgroundColor: themeColors.background }]}>
-            <Text style={[styles.title, { color: themeColors.text }]}>Senhas</Text>
-
             {editingPassword ? (
                 <View style={styles.editForm}>
-                    <Text style={[styles.passwordTextTitle, { color: themeColors.text }]}>
-                        <Text style={{ fontWeight: 'bold' }}>{service}</Text>
-                    </Text>
+
+                    {insertingPassword ? (
+                        <View>
+                            <Text style={[styles.passwordText, { color: themeColors.text }]}>
+                                <Text style={{ fontWeight: 'bold' }}>Serviço</Text>
+                            </Text>
+
+                            <TextInput
+                                style={[styles.input, { backgroundColor: themeColors.inputBackground, color: themeColors.text }]}
+                                placeholder="Serviço"
+                                placeholderTextColor={themeColors.icon}
+                                value={service}
+                                onChangeText={setService}
+                            />
+                        </View>
+                    ) :
+                        <Text style={[styles.passwordTextTitle, { color: themeColors.text }]}>
+                            <Text style={{ fontWeight: 'bold' }}>{service}</Text>
+                        </Text>
+                    }
 
                     <Text style={[styles.passwordText, { color: themeColors.text }]}>
                         <Text style={{ fontWeight: 'bold' }}>Nome de usuário</Text>
@@ -182,11 +324,21 @@ const HomeScreen = ({ navigation }) => {
                     </TouchableOpacity>
                 </View>
             ) : (
-                <FlatList
-                    data={passwords}
-                    keyExtractor={(item) => item.id.toString()}
-                    renderItem={renderPasswordItem}
-                />
+                <View>
+                    <View style={styles.buttonInsertContainer}>
+                        <TouchableOpacity
+                            style={[styles.insertButton, { backgroundColor: themeColors.buttonBackground }]}
+                            onPress={() => handleNewPassword()}
+                        >
+                            <Text style={[styles.editButtonText, { color: themeColors.text }]}>Adicionar</Text>
+                        </TouchableOpacity>
+                    </View>
+                    <FlatList
+                        data={passwords}
+                        keyExtractor={(item) => item.id.toString()}
+                        renderItem={renderPasswordItem}
+                    />
+                </View>
             )}
 
         </View>
@@ -203,6 +355,7 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 24,
         fontWeight: 'bold',
+        marginTop: 90,
         marginBottom: 10,
     },
     passwordItem: {
@@ -243,6 +396,18 @@ const styles = StyleSheet.create({
     editButtonText: {
         fontSize: 14,
         fontWeight: 'bold',
+    },
+    buttonInsertContainer: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        width: '100%',
+        marginTop: 20,
+        marginBottom: 10,
+    },
+    insertButton: {
+        padding: 8,
+        borderRadius: 5,
+        alignItems: 'center',
     },
     deleteButton: {
         padding: 8,
